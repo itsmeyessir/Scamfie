@@ -10,20 +10,21 @@ Scamfie is a browser extension + backend that analyzes marketplace listings and 
 
 ---
 
-## Table of contents
+## Table of Contents
 
-- Features
-- Tech Stack
-- Risk Flags & Progress Bar
-- Project Structure
-- Prerequisites
-- Setup & Run
-- API (server)
-- Example Request & Response
-- Debugging & Troubleshooting
-- Recommended Improvements
-- Security & Privacy
-- License
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Risk Flags & Progress Bar](#risk-flags--progress-bar)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Getting a Groq API Key](#getting-a-groq-api-key)
+- [Setup & Run](#setup--run)
+- [API (server)](#api-server)
+- [Example Request & Response](#example-request--response)
+- [Debugging & Troubleshooting](#debugging--troubleshooting)
+- [Recommended improvements](#recommended-improvements)
+- [Security & Privacy](#security--privacy)
+- [License](#license)
 
 ---
 
