@@ -1,29 +1,60 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8"> <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="container">
-    <h2>Scamfie</h2>
-    <p>Visit a listing and click Analyze.</p>
-    <button id="analyzeBtn">Analyze Page</button>
-    
-    <div id="loading" class="hidden">Thinking...</div>
-    
-    <div id="result" class="hidden">
-      <h3 id="verdict"></h3>
-      <div id="score-bar" role="progressbar" aria-hidden="false" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="score-segment" data-level="safe" aria-hidden="true"></div>
-        <div class="score-segment" data-level="caution" aria-hidden="true"></div>
-        <div class="score-segment" data-level="high-risk" aria-hidden="true"></div>
-        <div class="score-segment" data-level="critical" aria-hidden="true"></div>
-        <div id="score-fill" class="score-fill" aria-hidden="true"></div>
+  <div class="app-container">
+    <header>
+      <div class="logo-area">
+        <h1>Scamfie</h1>
+        <span class="badge">BETA</span>
+      </div>
+      <p class="subtitle">AI-Powered Marketplace Protection</p>
+    </header>
+
+    <main>
+      <div class="action-area">
+        <p class="instruction">Visit a listing to verify safety.</p>
+        <button id="analyzeBtn">
+          <span class="btn-text">Analyze Page</span>
+          <div class="btn-shine"></div>
+        </button>
       </div>
       
-      <ul id="flags"></ul>
+      <div id="loading" class="hidden">
+        <div class="spinner">
+          <div class="dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+        </div>
+        <p>Analyzing listing...</p>
+      </div>
       
-      <p id="advice" style="display:none"></p> </div>
+      <div id="result" class="hidden">
+        <div class="verdict-header">
+          <span class="verdict-label">Risk Level</span>
+          <h3 id="verdict">SAFE</h3>
+        </div>
+
+        <div id="score-bar">
+          <div class="score-track">
+            <div class="score-segment"></div>
+            <div class="score-segment"></div>
+            <div class="score-segment"></div>
+            <div class="score-segment"></div>
+          </div>
+          <div id="score-fill"></div>
+        </div>
+        
+        <div id="flags" class="cards-container">
+          </div>
+      </div>
+    </main>
   </div>
   <script src="popup.js"></script>
 </body>

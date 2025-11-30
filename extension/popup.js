@@ -19,9 +19,11 @@
 document.getElementById("analyzeBtn").addEventListener("click", async () => {
   const resultDiv = document.getElementById("result");
   const loadingDiv = document.getElementById("loading");
+  const analyzeBtn = document.getElementById("analyzeBtn");
   
   if(resultDiv) resultDiv.classList.add("hidden");
   if(loadingDiv) loadingDiv.classList.remove("hidden");
+  if(analyzeBtn) analyzeBtn.style.display = 'none';
 
   let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -69,10 +71,15 @@ async function getPageText() {
         image_count: 1, 
         active_listings: 0,
         follower_count: 0,
-        rating_count: 0
+        rating_count: 0,
+        platform: "Generic"
     };
 
+    // =========================================================
+    // STRATEGY A: FACEBOOK MARKETPLACE
+    // =========================================================
     if (hostname.includes("facebook.com")) {
+        extracted.platform = "Facebook";
         const mainBox = document.querySelector('div[role="main"]');
         
         if (mainBox) {
@@ -129,7 +136,6 @@ async function getPageText() {
         // 4. SELLER DETAILS (The "Aggressive Clicker")
         
         // Find ANY element containing "Seller details"
-        // We use XPath to find the text node because class names are random
         const xPathResult = document.evaluate(
             "//span[contains(text(), 'Seller details')]", 
             document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
@@ -142,25 +148,21 @@ async function getPageText() {
             if(sellerBtn.parentElement) sellerBtn.parentElement.click();
             if(sellerBtn.parentElement.parentElement) sellerBtn.parentElement.parentElement.click();
             
-            // WAIT LOOP: Wait for the popup to actually render text
-            // We look for "followers" or "friends" which only appears in the popup
+            // WAIT LOOP
             let popupFound = false;
             let combinedText = "";
 
             for (let i = 0; i < 20; i++) { // Wait up to 4 seconds
                 await sleep(200);
                 
-                // Get all dialogs/modals
                 const dialogs = document.querySelectorAll('div[role="dialog"]');
                 for (let d of dialogs) {
                     const txt = d.innerText;
-                    // Check if this is the right popup
                     if (txt.includes("active listing") || txt.includes("followers") || txt.includes("friends")) {
                         combinedText = txt;
-                        extracted.seller_info = txt; // Capture rich data
+                        extracted.seller_info = txt; 
                         popupFound = true;
                         
-                        // Close it immediately
                         const closeBtn = d.querySelector('[aria-label="Close"]');
                         if (closeBtn) closeBtn.click();
                         break;
@@ -171,25 +173,21 @@ async function getPageText() {
 
             // PARSE THE RICH DATA
             if (popupFound) {
-                // Joined Date
                 const joinedMatch = combinedText.match(/Joined Facebook in\s?(\d{4})/i);
                 if (joinedMatch) extracted.joined_date = joinedMatch[1];
                 
-                // Listings Count
                 const listingsMatch = combinedText.match(/(\d+)\s?active listing/i);
                 if (listingsMatch) extracted.active_listings = parseInt(listingsMatch[1]);
                 
-                // Followers
                 const followerMatch = combinedText.match(/(\d+)\s?(?:followers|friends)/i);
                 if (followerMatch) extracted.follower_count = parseInt(followerMatch[1]);
                 
-                // Ratings
                 const ratingMatch = combinedText.match(/\((\d+)\)/);
                 if (ratingMatch) extracted.rating_count = parseInt(ratingMatch[1]);
             }
         } 
         
-        // FALLBACK: If click failed, scrape whatever is visible in sidebar
+        // FALLBACK
         if (extracted.seller_info === "Not found" || extracted.active_listings === 0) {
             const sidebar = document.querySelector('div[role="complementary"]');
             if (sidebar) {
@@ -207,73 +205,239 @@ async function getPageText() {
         }
     } 
 
+    // =========================================================
+    // STRATEGY B: CAROUSELL "DEEP DIVE" SCRAPER (Final)
+    // =========================================================
+    else if (hostname.includes("carousell")) {
+        extracted.platform = "Carousell";
+        extracted.description = document.body.innerText.substring(0, 3000);
+
+        // 1. VISIBLE DATA (Title)
+        const titleEl = document.querySelector('p[data-testid="listing-card-text-title"], h1');
+        if (titleEl) extracted.title = titleEl.innerText;
+        
+        // 2. PRICE (Aggressive Search)
+        // Find largest price text near top of page to avoid "shipping fee" confusion
+        const allElements = Array.from(document.querySelectorAll('p, h3, h2, span'));
+        for (let el of allElements) {
+            if (el.innerText && el.innerText.match(/^(?:₱|PHP|Php)\s?[\d,]+$/)) {
+                const rect = el.getBoundingClientRect();
+                // Must be visible and near top
+                if (rect.top < 600 && rect.height > 0) {
+                    const fontSize = parseFloat(window.getComputedStyle(el).fontSize);
+                    if (fontSize > 16) {
+                        extracted.price = el.innerText;
+                        break; 
+                    }
+                }
+            }
+        }
+
+        // 3. IMAGE COUNT (Badge Strategy)
+        // Look for "1 of 5" or "5 images" badges
+        const allDivs = document.querySelectorAll('div, span, button');
+        for (let el of allDivs) {
+            if (el.innerText && /^\d+\s+images?$/.test(el.innerText)) {
+                extracted.image_count = parseInt(el.innerText);
+                break;
+            }
+        }
+        // Fallback: Slides
+        if (extracted.image_count <= 1) {
+             const slides = document.querySelectorAll('li[data-testid^="listing-gallery-image"]');
+             if (slides.length > 0) extracted.image_count = slides.length;
+        }
+
+        // 4. FIND PROFILE URL
+        let profileUrl = null;
+        const sellerCard = document.querySelector('div[data-testid="listing-card-seller-info"], a[data-testid="listing-card-text-seller-name"]');
+        
+        if (sellerCard) {
+            extracted.seller_info = sellerCard.innerText; 
+            if (sellerCard.tagName === 'A') profileUrl = sellerCard.href;
+            else {
+                const link = sellerCard.querySelector('a');
+                if (link) profileUrl = link.href;
+            }
+        } else {
+            const userLink = document.querySelector('a[href*="/u/"]');
+            if (userLink) {
+                profileUrl = userLink.href;
+                extracted.seller_info = userLink.innerText;
+            }
+        }
+
+        // 5. DEEP DIVE: FETCH HIDDEN JSON DATA
+        // This gets the REAL listing count and join date from the database
+        if (profileUrl) {
+            try {
+                const response = await fetch(profileUrl);
+                const htmlText = await response.text();
+                
+                // METHOD A: Parse React State (__NEXT_DATA__)
+                const jsonMatch = htmlText.match(/<script id="__NEXT_DATA__" type="application\/json">(.+?)<\/script>/);
+                
+                if (jsonMatch && jsonMatch[1]) {
+                    const jsonData = JSON.parse(jsonMatch[1]);
+                    const rawString = JSON.stringify(jsonData);
+                    
+                    // Regex the JSON for exact stats
+                    const listCount = rawString.match(/"listingCount":\s*(\d+)/);
+                    if(listCount) extracted.active_listings = parseInt(listCount[1]);
+
+                    const followCount = rawString.match(/"followersCount":\s*(\d+)/);
+                    if(followCount) extracted.follower_count = parseInt(followCount[1]);
+
+                    const revCount = rawString.match(/"reviewCount":\s*(\d+)/);
+                    if(revCount) extracted.rating_count = parseInt(revCount[1]);
+
+                    const joinMatch = rawString.match(/"dateJoined":\s*"(\d{4})/);
+                    if(joinMatch) extracted.joined_date = joinMatch[1];
+                    
+                    extracted.seller_info += ` | JSON VERIFIED DATA FOUND`;
+                } 
+                else {
+                    // METHOD B: Fallback to Meta Tags
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(htmlText, "text/html");
+                    
+                    const metaDesc = doc.querySelector('meta[name="description"]');
+                    if (metaDesc) {
+                        const descContent = metaDesc.getAttribute("content");
+                        const metaMatch = descContent.match(/(\d+)\s+listings?/i);
+                        if (metaMatch) extracted.active_listings = parseInt(metaMatch[1]);
+                    }
+                }
+
+        // =========================================================
+        // PATCH: VISUAL FALLBACK FOR DATES (Fixes the "Unknown" date issue)
+        // =========================================================
+        if (extracted.joined_date === "Unknown") {
+            // Find any element saying "Joined Xy ago"
+            const allText = document.body.innerText;
+            const relativeMatch = allText.match(/Joined\s+(\d+)([ym])/i); // Matches "Joined 4y" or "Joined 2m"
+            
+            if (relativeMatch) {
+                const num = parseInt(relativeMatch[1]);
+                const unit = relativeMatch[2]; // 'y' or 'm'
+                
+                if (unit === 'y') {
+                    // Send the raw number for the server to handle
+                    extracted.joined_year = num; // We pass age as year temporarily, server logic (above) will catch it
+                    extracted.relative_date_string = `${num}y`; 
+                } else {
+                    // Months/days = New account
+                    extracted.relative_date_string = "0y";
+                }
+            }
+        }
+
+            } catch (err) {
+                console.log("JSON Parse failed:", err);
+            }
+        }
+    }
+
     return JSON.stringify(extracted);
 }
 
 function displayResult(data) {
-  document.getElementById("loading").classList.add("hidden");
-  document.getElementById("result").classList.remove("hidden");
+  const resultDiv = document.getElementById("result");
+  const loadingDiv = document.getElementById("loading");
+  const analyzeBtn = document.getElementById("analyzeBtn");
+  
+  loadingDiv.classList.add("hidden");
+  resultDiv.classList.remove("hidden");
+  if(analyzeBtn) analyzeBtn.style.display = 'none';
 
   if (!data) data = {};
-  const score = Math.max(0, Math.min(100, Number(data.risk_score || 0)));
-  const verdictText = String((data.verdict || "SAFE")).toUpperCase().trim();
+  
+  // 1. Logic: Map Verdict to Exact Visuals
+  // We ignore the raw 'risk_score' if it conflicts with the verdict to ensure consistency.
+  let visualScore = 10; // Default Safe
+  let color = "#10B981"; // Green
+  let bgClass = "bg-safe";
+  let verdictText = (data.verdict || "SAFE").toUpperCase();
 
-  // Always use verdict string for color and label
-  const LEVELS = [
-    { key: "SAFE", color: "#28a745", class: "safe" },
-    { key: "CAUTION", color: "#d39e00", class: "caution" },
-    { key: "HIGH RISK", color: "#fd7e14", class: "high-risk" },
-    { key: "CRITICAL", color: "#dc3545", class: "critical" }
-  ];
-
-  // Find the level index by verdict string
-  let activeIndex = LEVELS.findIndex(lvl => verdictText.includes(lvl.key));
-  if (activeIndex === -1) {
-    // fallback to score buckets
-    activeIndex = Math.min(3, Math.floor(score / 25));
+  if (verdictText.includes("CAUTION")) {
+      visualScore = 38; // Force to Yellow segment
+      color = "#F59E0B";
+      bgClass = "bg-caution";
+  } else if (verdictText.includes("HIGH")) {
+      visualScore = 63; // Force to Orange segment
+      color = "#F97316";
+      bgClass = "bg-high-risk";
+  } else if (verdictText.includes("CRITICAL")) {
+      visualScore = 88; // Force to Red segment
+      color = "#EF4444";
+      bgClass = "bg-critical";
+  } else {
+      // Safe
+      visualScore = 10; 
+      color = "#10B981";
+      bgClass = "bg-safe";
   }
-  const level = LEVELS[activeIndex];
 
-  // Set verdict label and color
+  // 2. Update Header & Bar
   const verdictEl = document.getElementById("verdict");
-  verdictEl.innerText = level.key;
-  verdictEl.className = "";
-  verdictEl.classList.add(level.class);
+  verdictEl.innerText = verdictText;
+  verdictEl.style.color = color;
 
-  // Set progress bar fill
   const scoreFill = document.getElementById("score-fill");
-  scoreFill.style.width = `${score}%`;
-  scoreFill.style.backgroundColor = level.color;
+  setTimeout(() => {
+    scoreFill.style.width = `${visualScore}%`;
+    scoreFill.style.backgroundColor = color;
+  }, 100);
 
-  // Highlight the active segment
-  const segments = document.querySelectorAll("#score-bar .score-segment");
-  segments.forEach((s, idx) => s.classList.toggle("active", idx === activeIndex));
-
-  // Render analysis, action plan, and key findings (as you already do)
+  // 3. Render Cards
   const list = document.getElementById("flags");
-  const actionBg = (level.class === 'safe') ? '#e6f4ea' : (level.class === 'caution') ? '#fff3cd' : '#fff4e6';
-  list.innerHTML = `
-    <span class="box-label">Analysis</span>
-    <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid ${level.color}; margin-bottom: 10px;">
-        <span style="font-size: 13px; color: #333; line-height: 1.4;">${data.prediction || "Check complete."}</span>
-    </div>
+  const actionHighlight = (verdictText === "SAFE") ? "background: #ECFDF5;" : 
+                          (verdictText === "CRITICAL") ? "background: #FEF2F2;" : "";
 
-    <span class="box-label">Action Plan</span>
-    <div style="background: ${actionBg}; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-        <span style="font-size: 13px; font-weight: bold; color: #111">${data.action_step}</span>
-    </div>
-
-    <span class="box-label">Key Findings</span>
-  `;
-
+  let keyFindingsHtml = '';
   if(data.key_findings) {
-      data.key_findings.forEach(flag => {
-        const li = document.createElement("li");
-        li.style.marginBottom = "8px"; 
-        li.innerText = typeof flag === 'object' && flag !== null
-          ? Object.values(flag).join(": ")
-          : flag;
-        list.appendChild(li);
-      });
+      keyFindingsHtml = `<ul class="card-list" style="padding-left:0; list-style:none; margin:0;">
+        ${data.key_findings.map(flag => {
+            const text = typeof flag === 'object' ? Object.values(flag).join(" ") : flag;
+            return `<li>${text}</li>`;
+        }).join('')}
+      </ul>`;
   }
+
+  // Google Search Button Logic
+  const searchTerm = data.item_name || "marketplace item";
+  const marketPriceHtml = data.market_price_range ? `
+    <div class="info-card" style="background: #eff6ff; border-left: 4px solid #3b82f6;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+            <span class="box-label" style="color: #3b82f6; margin:0;">💰 Market Price</span>
+        </div>
+        <div style="font-size: 15px; font-weight: 700; color: #1e3a8a; margin-bottom: 8px;">
+            ${data.market_price_range}
+        </div>
+        <div style="font-size: 11px;">
+            <a href="https://www.google.com/search?q=${encodeURIComponent(searchTerm)}+price+philippines" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">
+                🔎 Verify "${searchTerm}" &rarr;
+            </a>
+        </div>
+    </div>
+  ` : '';
+
+  list.innerHTML = `
+    <div class="info-card ${bgClass}">
+        <span class="box-label">Prediction</span>
+        <div class="card-content">${data.prediction || "Check complete."}</div>
+    </div>
+
+    ${marketPriceHtml}
+
+    <div class="info-card ${bgClass}" style="${actionHighlight}">
+        <span class="box-label">Recommended Action</span>
+        <div class="card-content" style="font-weight: 700;">${data.action_step}</div>
+    </div>
+
+    <div class="info-card" style="border-left: 4px solid #E5E7EB;">
+        <span class="box-label">Key Findings</span>
+        ${keyFindingsHtml}
+    </div>
+  `;
 }
