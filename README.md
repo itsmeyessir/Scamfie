@@ -1,7 +1,5 @@
 # Scamfie (Open-Source)
 
-## AI-Powered Scam Detection for Facebook Marketplace & Carousell
-
 ![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
 ![Status](https://img.shields.io/badge/status-MVP-orange.svg)
