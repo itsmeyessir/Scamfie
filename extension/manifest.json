@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Scamfie",
+  "version": "1.0",
+  "description": "Analyze FB Marketplace & Carousell for scams using Groq.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://localhost:3000/*"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

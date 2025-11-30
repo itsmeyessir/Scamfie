@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"> <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Scamfie</h2>
+    <p>Visit a listing and click Analyze.</p>
+    <button id="analyzeBtn">Analyze Page</button>
+    
+    <div id="loading" class="hidden">Thinking...</div>
+    
+    <div id="result" class="hidden">
+      <h3 id="verdict"></h3>
+      <div id="score-bar" role="progressbar" aria-hidden="false" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="score-segment" data-level="safe" aria-hidden="true"></div>
+        <div class="score-segment" data-level="caution" aria-hidden="true"></div>
+        <div class="score-segment" data-level="high-risk" aria-hidden="true"></div>
+        <div class="score-segment" data-level="critical" aria-hidden="true"></div>
+        <div id="score-fill" class="score-fill" aria-hidden="true"></div>
+      </div>
+      
+      <ul id="flags"></ul>
+      
+      <p id="advice" style="display:none"></p> </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
