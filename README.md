@@ -10,12 +10,8 @@ Scamfie is a browser extension + backend that analyzes marketplace listings and 
 
 ## Visual Demo
 
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/68df858a-fa65-4cb2-868b-9b765cead50f" width="100%" alt="Scamfie Visual Demo" />
-</div>
+![scamfie_demo](https://github.com/user-attachments/assets/546aa549-ffa7-41bb-9880-a3fb0e40ce20)
 
-> **Note:** If the video above does not play, [click here to watch it directly](https://github.com/user-attachments/assets/68df858a-fa65-4cb2-868b-9b765cead50f).
-> 
 ---
 
 ## Table of Contents
